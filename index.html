@@ -3113,7 +3113,7 @@
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                     Upload Audio
                   </label>
-                  <input class="voice-file-input" id="voice-file-input" type="file" accept="audio/*,.wav" onchange="handleVoiceFile(this.files)" />
+                  <input class="voice-file-input" id="voice-file-input" type="file" accept="audio/*,.wav,.m4a,.mp3,.mp4,.aac,.webm,.ogg" onchange="handleVoiceFile(this.files)" />
                   <button class="voice-action primary" id="voice-submit-btn" type="button" onclick="submitVoiceDemo()" disabled>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     Run Ijwi
@@ -3160,6 +3160,7 @@
           </div>
         </div>
         <p class="try-disclaimer-text">
+          <strong>Notice:</strong> Ijwi is not currently connected to the internet. It answers from the prototype model only.<br />
           <strong>Disclaimer:</strong> This early prototype may misunderstand speech, produce imperfect Kinyarwanda, or respond slowly. It is not a substitute for qualified human support in medical, legal, financial, public-service, or emergency situations.
         </p>
       </div>
@@ -4271,6 +4272,11 @@
         mediaRecorder: null,
         stream: null,
         chunks: [],
+        recordingMode: '',
+        recordingProcessor: null,
+        recordingSilentGain: null,
+        recordingBuffers: [],
+        recordingSampleRate: 0,
         isRecording: false,
         isProcessing: false,
         apiReady: false,
@@ -4305,6 +4311,16 @@
     const SVG_PLAY = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="7 4 20 12 7 20 7 4"></polygon></svg>';
     const SVG_PAUSE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>';
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    const MEDIA_RECORDER_MIME_TYPES = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4;codecs=mp4a.40.2',
+      'audio/mp4',
+      'audio/aac',
+      'audio/ogg;codecs=opus',
+      'audio/ogg'
+    ];
+    const TARGET_WAV_SAMPLE_RATE = 16000;
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   
     const dom = {
@@ -4644,9 +4660,10 @@
       cacheVoiceDom();
       const file = files && files[0];
       if (!file) return;
+      const fileName = file.name || defaultAudioFileName(file.type);
       state.voice.audioBlob = file;
-      state.voice.audioName = file.name || 'uploaded-audio';
-      setVoiceInputAudio(file, state.voice.audioName);
+      state.voice.audioName = fileName;
+      setVoiceInputAudio(file, fileName);
       setVoiceError('');
       setVoiceStatus(state.voice.apiReady ? 'ready' : 'checking');
       setVoiceWaveMode('selected');
@@ -4682,30 +4699,18 @@
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone unavailable');
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        setupVoiceAnalyser(stream);
-  
-        const recorder = new MediaRecorder(stream);
         state.voice.stream = stream;
-        state.voice.mediaRecorder = recorder;
         state.voice.chunks = [];
-  
-        recorder.addEventListener('dataavailable', (event) => {
-          if (event.data && event.data.size > 0) state.voice.chunks.push(event.data);
-        });
-  
-        recorder.addEventListener('stop', () => {
-          const blob = new Blob(state.voice.chunks, { type: recorder.mimeType || 'audio/webm' });
-          state.voice.audioBlob = blob;
-          state.voice.audioName = 'recorded-question.webm';
-          state.voice.chunks = [];
-          setVoiceInputAudio(blob, state.voice.audioName);
-          setVoiceWaveMode('selected');
-          setVoiceWaveCaption('Recording captured', 'Ready');
-          setVoiceStatus(state.voice.apiReady ? 'ready' : 'checking');
-          updateVoiceSubmitState();
-        }, { once: true });
-  
-        recorder.start();
+        state.voice.recordingBuffers = [];
+        state.voice.recordingMode = '';
+        setupVoiceAnalyser(stream);
+        if (state.voice.audioContext?.state === 'suspended') {
+          await state.voice.audioContext.resume().catch(() => {});
+        }
+
+        const usingWavRecorder = startVoiceWavRecorder();
+        if (!usingWavRecorder) startVoiceMediaRecorder(stream);
+
         state.voice.isRecording = true;
         state.voice.recordingStartedAt = Date.now();
         startVoiceTimer();
@@ -4717,28 +4722,146 @@
         setVoiceWaveCaption('Listening now', 'Live level');
         updateVoiceSubmitState();
       } catch (err) {
+        stopVoiceRecording(false);
         setVoiceStatus(state.voice.apiReady ? 'ready' : 'error');
         setVoiceError('Microphone access failed. You can still upload an audio file.');
       }
     }
-  
-    function stopVoiceRecording() {
+
+    function startVoiceWavRecorder() {
+      const ctx = state.voice.audioContext;
+      const source = state.voice.source;
+      if (!ctx || !source || typeof ctx.createScriptProcessor !== 'function') return false;
+
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      const silentGain = ctx.createGain();
+      silentGain.gain.value = 0;
+
+      state.voice.recordingMode = 'wav';
+      state.voice.recordingSampleRate = ctx.sampleRate || 44100;
+      state.voice.recordingBuffers = [];
+      state.voice.recordingProcessor = processor;
+      state.voice.recordingSilentGain = silentGain;
+
+      processor.onaudioprocess = (event) => {
+        if (!state.voice.isRecording || state.voice.recordingMode !== 'wav') return;
+        const input = event.inputBuffer.getChannelData(0);
+        state.voice.recordingBuffers.push(new Float32Array(input));
+      };
+
+      source.connect(processor);
+      processor.connect(silentGain);
+      silentGain.connect(ctx.destination);
+      return true;
+    }
+
+    function startVoiceMediaRecorder(stream) {
+      if (!window.MediaRecorder) throw new Error('Recording unavailable');
+      const mimeType = getSupportedRecordingMimeType();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      state.voice.recordingMode = 'media';
+      state.voice.mediaRecorder = recorder;
+
+      recorder.addEventListener('dataavailable', (event) => {
+        if (event.data && event.data.size > 0) state.voice.chunks.push(event.data);
+      });
+
+      recorder.addEventListener('stop', () => {
+        const blobMimeType = recorder.mimeType || mimeType || 'audio/webm';
+        const blob = new Blob(state.voice.chunks, { type: blobMimeType });
+        state.voice.audioBlob = blob;
+        state.voice.audioName = `recorded-question.${extensionFromMimeType(blobMimeType)}`;
+        state.voice.chunks = [];
+        setVoiceInputAudio(blob, state.voice.audioName);
+        setVoiceWaveMode('selected');
+        setVoiceWaveCaption('Recording captured', 'Ready');
+        setVoiceStatus(state.voice.apiReady ? 'ready' : 'checking');
+        updateVoiceSubmitState();
+      }, { once: true });
+
+      recorder.start();
+    }
+
+    function getSupportedRecordingMimeType() {
+      if (!window.MediaRecorder?.isTypeSupported) return '';
+      return MEDIA_RECORDER_MIME_TYPES.find(type => MediaRecorder.isTypeSupported(type)) || '';
+    }
+
+    function extensionFromMimeType(mimeType) {
+      const type = (mimeType || '').toLowerCase();
+      if (type.includes('wav')) return 'wav';
+      if (type.includes('mp4') || type.includes('aac')) return 'm4a';
+      if (type.includes('mpeg') || type.includes('mp3')) return 'mp3';
+      if (type.includes('ogg')) return 'ogg';
+      if (type.includes('webm')) return 'webm';
+      return 'webm';
+    }
+
+    function stopVoiceRecording(restoreUi = true) {
       cacheVoiceDom();
       const recorder = state.voice.mediaRecorder;
+      const usedWavRecorder = state.voice.recordingMode === 'wav';
+      state.voice.isRecording = false;
+
       if (recorder && recorder.state !== 'inactive') recorder.stop();
+      if (usedWavRecorder) finishVoiceWavRecording();
       if (state.voice.stream) {
         for (const track of state.voice.stream.getTracks()) track.stop();
       }
       state.voice.stream = null;
       state.voice.mediaRecorder = null;
+      cleanupVoiceWavRecorder();
       cleanupVoiceAnalyser();
       stopVoiceTimer();
-      state.voice.isRecording = false;
-      if (dom.voice.recordLabel) dom.voice.recordLabel.textContent = 'Record';
-      dom.voice.recordBtn?.classList.remove('recording');
-      updateVoiceSubmitState();
+      state.voice.recordingMode = '';
+      if (restoreUi) {
+        if (dom.voice.recordLabel) dom.voice.recordLabel.textContent = 'Record';
+        dom.voice.recordBtn?.classList.remove('recording');
+        updateVoiceSubmitState();
+      }
     }
-  
+
+    function finishVoiceWavRecording() {
+      const samples = mergeFloat32Buffers(state.voice.recordingBuffers);
+      if (!samples.length) {
+        setVoiceError('Recording was too short. Please try again.');
+        return;
+      }
+
+      const recordingSampleRate = state.voice.recordingSampleRate || 44100;
+      const wavSamples = resampleAudioSamples(samples, recordingSampleRate, TARGET_WAV_SAMPLE_RATE);
+      const wavBlob = new Blob(
+        [encodeWavFromSamples(wavSamples, TARGET_WAV_SAMPLE_RATE)],
+        { type: 'audio/wav' }
+      );
+      state.voice.audioBlob = wavBlob;
+      state.voice.audioName = 'recorded-question.wav';
+      setVoiceInputAudio(wavBlob, state.voice.audioName);
+      setVoiceWaveMode('selected');
+      setVoiceWaveCaption('Recording captured', 'Ready');
+      setVoiceStatus(state.voice.apiReady ? 'ready' : 'checking');
+    }
+
+    function cleanupVoiceWavRecorder() {
+      state.voice.recordingProcessor?.disconnect?.();
+      state.voice.recordingSilentGain?.disconnect?.();
+      state.voice.recordingProcessor = null;
+      state.voice.recordingSilentGain = null;
+      state.voice.recordingBuffers = [];
+      state.voice.recordingSampleRate = 0;
+    }
+
+    function mergeFloat32Buffers(buffers) {
+      const length = buffers.reduce((total, buffer) => total + buffer.length, 0);
+      const merged = new Float32Array(length);
+      let offset = 0;
+      for (const buffer of buffers) {
+        merged.set(buffer, offset);
+        offset += buffer.length;
+      }
+      return merged;
+    }
+
     function startVoiceTimer() {
       stopVoiceTimer();
       updateVoiceTimer();
@@ -5050,6 +5173,28 @@
       const button = kind === 'input' ? dom.voice.inputPlay : dom.voice.responsePlay;
       if (button) button.innerHTML = isPlaying ? SVG_PAUSE : SVG_PLAY;
     }
+
+    function isElementInCurrentView(el, margin = 28) {
+      if (!el || typeof el.getBoundingClientRect !== 'function') return true;
+      const rect = el.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+      if (!viewportHeight || !viewportWidth) return true;
+      return (
+        rect.top >= margin &&
+        rect.left >= 0 &&
+        rect.bottom <= viewportHeight - margin &&
+        rect.right <= viewportWidth
+      );
+    }
+
+    function scrollVoiceOutputIntoViewIfNeeded() {
+      cacheVoiceDom();
+      const target = dom.voice.responsePanel?.closest('.voice-result-box.featured') || dom.voice.responsePanel;
+      if (!target || isElementInCurrentView(target)) return;
+      const behavior = prefersReducedMotion.matches ? 'auto' : 'smooth';
+      target.scrollIntoView({ behavior, block: 'center', inline: 'nearest' });
+    }
   
     async function submitVoiceDemo() {
       cacheVoiceDom();
@@ -5058,7 +5203,7 @@
         await checkPrototypeAvailability();
         if (!state.voice.apiReady) return;
       }
-  
+
       state.voice.isProcessing = true;
       updateVoiceSubmitState();
       setVoiceError('');
@@ -5071,7 +5216,7 @@
       dom.voice.processing?.classList.add('visible');
       setVoiceOutput('voice-transcript', 'Ijwi is listening...', true);
       setVoiceOutput('voice-reply', 'Ijwi is answering...', true);
-  
+
       if (dom.voice.responseAudio) {
         dom.voice.responseAudio.pause();
         dom.voice.responseAudio.removeAttribute('src');
@@ -5079,16 +5224,18 @@
       }
       dom.voice.responsePanel?.classList.remove('response-ready');
       if (dom.voice.responsePlay) dom.voice.responsePlay.disabled = true;
-  
+
       try {
-        const wavBlob = await normalizeAudioToWav(state.voice.audioBlob);
+        const preparedAudio = await prepareAudioForUpload(state.voice.audioBlob, state.voice.audioName);
         const form = new FormData();
-        form.append('audio', wavBlob, 'ijwi-question.wav');
-  
+        form.append('audio', preparedAudio.blob, preparedAudio.filename);
+
         const response = await fetch(PROTOTYPE_API_URL + '/voice', { method: 'POST', body: form });
         const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.detail || 'Ijwi could not answer from this audio.');
-  
+        if (!response.ok) {
+          throw new Error(data.detail || 'Ijwi could not process that audio. Please try recording again or upload a short WAV, MP3, M4A, AAC, WEBM, or OGG file.');
+        }
+
         setVoiceOutput('voice-transcript', data.transcript || 'Ijwi could not hear that clearly.');
         setVoiceOutput('voice-reply', data.reply || 'No reply returned.');
         if (dom.voice.responseAudio && data.audioBase64) {
@@ -5106,6 +5253,9 @@
         setResponseWaveMode('complete');
         setVoiceWaveCaption('Ijwi answered', 'Complete');
         setResponseWaveCaption('Ijwi is ready', 'Complete');
+        requestAnimationFrame(() => {
+          window.setTimeout(scrollVoiceOutputIntoViewIfNeeded, 80);
+        });
       } catch (err) {
         setVoiceOutput('voice-transcript', 'What Ijwi hears will appear here.', true);
         setVoiceOutput('voice-reply', "Ijwi's answer will appear here.", true);
@@ -5142,52 +5292,45 @@
       return new Blob(chunks, { type: mimeType });
     }
   
-    async function normalizeAudioToWav(blob) {
-      if (!AudioContextClass) return blob;
+    async function prepareAudioForUpload(blob, name = '') {
+      if (!blob) throw new Error('Please record or upload an audio file first.');
+      const safeName = sanitizeAudioFileName(name || defaultAudioFileName(blob.type));
+
+      if (AudioContextClass) {
+        try {
+          const wavBlob = await normalizeAudioToWav(blob, true);
+          return { blob: wavBlob, filename: 'ijwi-question.wav' };
+        } catch (err) {
+          if (isWavAudio(blob, safeName)) {
+            return { blob, filename: ensureAudioExtension(safeName, blob.type, 'wav') };
+          }
+        }
+      }
+
+      return { blob, filename: ensureAudioExtension(safeName, blob.type, extensionFromMimeType(blob.type)) };
+    }
+
+    async function normalizeAudioToWav(blob, forceDecode = false) {
+      if (!forceDecode && ((blob.type || '').includes('wav') || (state.voice.audioName || '').toLowerCase().endsWith('.wav'))) return blob;
+      if (!AudioContextClass) throw new Error('Browser audio decoding is unavailable.');
       let ctx;
       try {
         const arrayBuffer = await blob.arrayBuffer();
         ctx = new AudioContextClass();
+        if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
         const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
         return new Blob([encodeWav(audioBuffer)], { type: 'audio/wav' });
-      } catch (err) {
-        if ((blob.type || '').includes('wav') || state.voice.audioName.toLowerCase().endsWith('.wav')) return blob;
-        throw new Error('Could not prepare that audio file. Please try a WAV file.');
       } finally {
         if (ctx && ctx.state !== 'closed') await ctx.close().catch(() => {});
       }
     }
-  
+
     function encodeWav(audioBuffer) {
-      const sampleRate = audioBuffer.sampleRate;
-      const samples = mixToMono(audioBuffer);
-      const bytesPerSample = 2;
-      const blockAlign = bytesPerSample;
-      const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
-      const view = new DataView(buffer);
-  
-      writeAscii(view, 0, 'RIFF');
-      view.setUint32(4, 36 + samples.length * bytesPerSample, true);
-      writeAscii(view, 8, 'WAVE');
-      writeAscii(view, 12, 'fmt ');
-      view.setUint32(16, 16, true);
-      view.setUint16(20, 1, true);
-      view.setUint16(22, 1, true);
-      view.setUint32(24, sampleRate, true);
-      view.setUint32(28, sampleRate * blockAlign, true);
-      view.setUint16(32, blockAlign, true);
-      view.setUint16(34, 16, true);
-      writeAscii(view, 36, 'data');
-      view.setUint32(40, samples.length * bytesPerSample, true);
-  
-      let offset = 44;
-      for (let i = 0; i < samples.length; i++, offset += 2) {
-        const sample = clamp(samples[i], -1, 1);
-        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
-      }
-      return buffer;
+      const mono = mixToMono(audioBuffer);
+      const samples = resampleAudioSamples(mono, audioBuffer.sampleRate, TARGET_WAV_SAMPLE_RATE);
+      return encodeWavFromSamples(samples, TARGET_WAV_SAMPLE_RATE);
     }
-  
+
     function mixToMono(audioBuffer) {
       const length = audioBuffer.length;
       const channelCount = audioBuffer.numberOfChannels || 1;
@@ -5197,6 +5340,43 @@
         for (let i = 0; i < length; i++) mono[i] += data[i] / channelCount;
       }
       return mono;
+    }
+
+    function resampleAudioSamples(samples, fromSampleRate, toSampleRate) {
+      if (!samples || !samples.length) return new Float32Array(0);
+      if (!fromSampleRate || !toSampleRate || fromSampleRate === toSampleRate) return samples;
+      const ratio = fromSampleRate / toSampleRate;
+      const newLength = Math.max(1, Math.round(samples.length / ratio));
+      const resampled = new Float32Array(newLength);
+      for (let i = 0; i < newLength; i++) {
+        const sourceIndex = i * ratio;
+        const leftIndex = Math.floor(sourceIndex);
+        const rightIndex = Math.min(leftIndex + 1, samples.length - 1);
+        const weight = sourceIndex - leftIndex;
+        resampled[i] = samples[leftIndex] * (1 - weight) + samples[rightIndex] * weight;
+      }
+      return resampled;
+    }
+
+    function isWavAudio(blob, name = '') {
+      return (blob?.type || '').toLowerCase().includes('wav') || name.toLowerCase().endsWith('.wav');
+    }
+
+    function defaultAudioFileName(mimeType = '') {
+      const ext = extensionFromMimeType(mimeType) || 'webm';
+      return `ijwi-audio.${ext}`;
+    }
+
+    function sanitizeAudioFileName(name = '') {
+      const cleaned = String(name || 'ijwi-audio').split(/[\\/]/).pop().replace(/[^a-zA-Z0-9._-]/g, '-');
+      return cleaned || 'ijwi-audio';
+    }
+
+    function ensureAudioExtension(name = '', mimeType = '', fallbackExt = 'webm') {
+      const cleaned = sanitizeAudioFileName(name);
+      if (/\.[a-z0-9]{2,5}$/i.test(cleaned)) return cleaned;
+      const ext = (extensionFromMimeType(mimeType) || fallbackExt || 'webm').replace(/^\./, '');
+      return `${cleaned}.${ext}`;
     }
   
     function writeAscii(view, offset, text) {
