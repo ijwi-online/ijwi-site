@@ -1099,6 +1099,17 @@
       transform: none;
       box-shadow: none;
     }
+    .voice-action.is-finalizing {
+      border-color: rgba(246,200,95,0.42);
+      color: var(--ijwi-gold);
+      background: rgba(246,200,95,0.08);
+    }
+    .voice-action,
+    .voice-wave-play {
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: manipulation;
+    }
     .voice-file-input { display: none; }
     .voice-file-meta {
       min-height: 22px;
@@ -1205,6 +1216,21 @@
       white-space: pre-wrap;
     }
     .voice-result-content.is-empty { color: var(--ijwi-faint); }
+    .voice-demo-shell,
+    .voice-input-card,
+    .voice-wave-panel,
+    .voice-result-box,
+    .voice-processing {
+      contain: layout paint style;
+    }
+    .voice-wave-canvas {
+      transform: translateZ(0);
+      backface-visibility: hidden;
+    }
+    .voice-demo-shell.is-recording .voice-wave-canvas,
+    .voice-demo-shell.is-processing .voice-wave-canvas {
+      will-change: contents;
+    }
     /* Try sidebar */
     .sidebar-card { background: var(--grad-card); border: 1px solid rgba(168,183,204,0.12); border-radius: 20px; padding: var(--sp-6); }
     .sidebar-card h4 { font-family: var(--font-display); font-size: 15px; font-weight: 600; margin-bottom: var(--sp-4); }
@@ -2556,6 +2582,46 @@
     }
 
 
+    /* Voice prototype robustness pass — mobile taps, safe areas, and small screens. */
+    #voice-record-btn {
+      min-height: 54px;
+      position: relative;
+    }
+    #voice-record-btn.recording {
+      min-height: 58px;
+    }
+    @media (hover: none) and (pointer: coarse) {
+      .voice-action:hover,
+      .voice-wave-play:hover {
+        transform: none;
+      }
+      .voice-action:active,
+      .voice-wave-play:active {
+        transform: scale(0.99);
+      }
+    }
+    @media (max-width: 560px) {
+      .voice-controls {
+        gap: 12px;
+      }
+      .voice-action {
+        min-height: 58px;
+        white-space: normal;
+        line-height: 1.25;
+      }
+      .voice-file-meta,
+      .voice-error {
+        font-size: 12.5px;
+      }
+      .voice-status-pill {
+        align-self: flex-start;
+      }
+      .voice-timer {
+        align-self: flex-start;
+      }
+    }
+
+
     /* Performance-only compositing hints: no visual or layout changes. */
     .hero-wave-bar,
     .hero-value-card,
@@ -3087,7 +3153,7 @@
                 <div class="voice-input-head">
                   <div>
                     <div class="voice-input-title">Input audio</div>
-                    <p class="voice-input-help">Record a short question directly in the browser, or upload a WAV/audio file from your device.</p>
+                    <p class="voice-input-help">Record a short question directly in the browser, or upload an audio file from your device.</p>
                   </div>
                   <div class="voice-timer" id="voice-timer">00:00</div>
                 </div>
@@ -3105,7 +3171,7 @@
                 </div>
 
                 <div class="voice-controls">
-                  <button class="voice-action" id="voice-record-btn" type="button" onclick="toggleVoiceRecording()">
+                  <button class="voice-action" id="voice-record-btn" type="button">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
                     <span id="voice-record-label">Record</span>
                   </button>
@@ -3113,7 +3179,7 @@
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                     Upload Audio
                   </label>
-                  <input class="voice-file-input" id="voice-file-input" type="file" accept="audio/*,.wav" onchange="handleVoiceFile(this.files)" />
+                  <input class="voice-file-input" id="voice-file-input" type="file" accept="audio/*,video/3gpp,video/3gpp2,video/mp4,.wav,.wave,.mp3,.m4a,.mp4,.aac,.ogg,.oga,.opus,.webm,.flac,.amr,.awb,.3gp,.3gpp,.3g2,.3gpp2,.caf,.aif,.aiff,.mka,.mkv,.mov" onchange="handleVoiceFile(this.files)" />
                   <button class="voice-action primary" id="voice-submit-btn" type="button" onclick="submitVoiceDemo()" disabled>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     Run Ijwi
@@ -4273,6 +4339,8 @@
         chunks: [],
         isRecording: false,
         isProcessing: false,
+        isStarting: false,
+        isStopping: false,
         apiReady: false,
         audioContext: null,
         analyser: null,
@@ -4288,9 +4356,20 @@
         responseWavePhase: 0,
         recordingStartedAt: 0,
         timerId: null,
+        stopTimeoutId: null,
+        maxRecordingTimeoutId: null,
+        lastRecordTapAt: 0,
+        recordMimeType: '',
+        recordFileExt: 'webm',
+        discardCurrentRecording: false,
         inputAudioUrl: '',
         responseAudioUrl: '',
-        activeAudio: null
+        activeAudio: null,
+        loopInViewport: true,
+        lastInputDrawAt: 0,
+        lastResponseDrawAt: 0,
+        waveTimerId: null,
+        responseWaveTimerId: null
       }
     };
   
@@ -4306,6 +4385,17 @@
     const SVG_PAUSE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>';
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const MAX_RECORDING_MS = 90_000;
+    const MAX_AUDIO_UPLOAD_BYTES = 50 * 1024 * 1024;
+    const CLIENT_SIDE_WAV_NORMALIZATION = window.IJWI_CLIENT_SIDE_WAV_NORMALIZATION === true;
+    const RECORD_MIME_CANDIDATES = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4;codecs=mp4a.40.2',
+      'audio/mp4',
+      'audio/ogg;codecs=opus',
+      'audio/ogg'
+    ];
   
     const dom = {
       header: null,
@@ -4331,6 +4421,7 @@
     let resizeTicking = false;
     let prototypeCheckPromise = null;
     let voiceDomReady = false;
+    let voiceLoopObserver = null;
     let pageTargetByRoute = new Map();
     let heroWaveMarkupCache = '';
 
@@ -4387,10 +4478,13 @@
         reply: byId('voice-reply')
       };
 
+      bindVoiceControlEvents();
+
       canvasSlots.input.canvas = inputCanvas;
       canvasSlots.input.ctx = inputCanvas?.getContext('2d') || null;
       canvasSlots.response.canvas = responseCanvas;
       canvasSlots.response.ctx = responseCanvas?.getContext('2d') || null;
+      observeVoiceLoopVisibility();
       voiceDomReady = true;
     }
   
@@ -4420,6 +4514,7 @@
       const nextPage = ROUTE_SET.has(page) ? page : 'home';
       const target = pageTargetByRoute.get(nextPage) || byId('page-' + nextPage);
       if (!target) return;
+      if (state.currentPage === 'try' && nextPage !== 'try' && state.voice.isRecording) stopVoiceRecording({ reason: 'Leaving demo' });
 
       for (const el of dom.pageViews) {
         el.classList.toggle('active', el === target);
@@ -4607,11 +4702,49 @@
     }
   
     function updateVoiceSubmitState() {
+      const voiceBusy = isVoiceInteractionBusy();
       if (dom.voice.submitBtn) {
-        dom.voice.submitBtn.disabled = !state.voice.audioBlob || !state.voice.apiReady || state.voice.isProcessing || state.voice.isRecording;
+        dom.voice.submitBtn.disabled = !state.voice.audioBlob || !state.voice.apiReady || voiceBusy;
+      }
+      if (dom.voice.recordBtn) {
+        dom.voice.recordBtn.disabled = state.voice.isProcessing || state.voice.isStarting || state.voice.isStopping;
       }
     }
-  
+
+    function isVoiceInteractionBusy() {
+      return state.voice.isProcessing || state.voice.isRecording || state.voice.isStarting || state.voice.isStopping;
+    }
+
+    function updateVoiceRecordButton(label) {
+      if (!dom.voice.recordBtn) return;
+      const isRecording = state.voice.isRecording;
+      const isFinalizing = state.voice.isStopping;
+      if (dom.voice.recordLabel) dom.voice.recordLabel.textContent = label || (isRecording ? 'Stop' : 'Record');
+      dom.voice.recordBtn.classList.toggle('recording', isRecording);
+      dom.voice.recordBtn.classList.toggle('is-finalizing', isFinalizing);
+      dom.voice.recordBtn.setAttribute('aria-pressed', isRecording ? 'true' : 'false');
+      dom.voice.recordBtn.setAttribute('aria-label', isRecording ? 'Stop recording' : 'Start recording');
+    }
+
+    function bindVoiceControlEvents() {
+      if (!dom.voice.recordBtn || dom.voice.recordBtn.dataset.bound === 'true') return;
+      dom.voice.recordBtn.dataset.bound = 'true';
+      dom.voice.recordBtn.removeAttribute('onclick');
+      const handleRecordPress = (event) => {
+        if (event.cancelable) event.preventDefault();
+        const now = Date.now();
+        if (now - state.voice.lastRecordTapAt < 260) return;
+        state.voice.lastRecordTapAt = now;
+        toggleVoiceRecording();
+      };
+      if (window.PointerEvent) {
+        dom.voice.recordBtn.addEventListener('pointerup', handleRecordPress, { passive: false });
+      } else {
+        dom.voice.recordBtn.addEventListener('click', handleRecordPress);
+        dom.voice.recordBtn.addEventListener('touchend', handleRecordPress, { passive: false });
+      }
+    }
+
     async function checkPrototypeAvailability() {
       if (state.currentPage !== 'try') return;
       cacheVoiceDom();
@@ -4623,14 +4756,18 @@
           const response = await fetch(PROTOTYPE_API_URL + '/health', { cache: 'no-store' });
           if (!response.ok) throw new Error('Service unavailable');
           state.voice.apiReady = true;
-          setVoiceStatus('ready');
-          if (!state.voice.audioBlob) setVoiceWaveCaption('Awaiting input');
-          setVoiceError('');
+          if (!isVoiceInteractionBusy()) {
+            setVoiceStatus('ready');
+            if (!state.voice.audioBlob) setVoiceWaveCaption('Awaiting input');
+            setVoiceError('');
+          }
         } catch (err) {
           state.voice.apiReady = false;
-          setVoiceStatus('error');
-          setVoiceWaveCaption('Service unavailable', 'Try again');
-          setVoiceError('The voice service is not responding. Please try again in a moment.');
+          if (!isVoiceInteractionBusy()) {
+            setVoiceStatus('error');
+            setVoiceWaveCaption('Service unavailable', 'Try again');
+            setVoiceError('The voice service is not responding. Please try again in a moment.');
+          }
         } finally {
           updateVoiceSubmitState();
           prototypeCheckPromise = null;
@@ -4644,8 +4781,18 @@
       cacheVoiceDom();
       const file = files && files[0];
       if (!file) return;
+      if (state.voice.isRecording) stopVoiceRecording({ reason: 'New file selected', discard: true });
+      if (!file.size) {
+        setVoiceError('That audio file is empty. Please choose another recording.');
+        return;
+      }
+      if (file.size > MAX_AUDIO_UPLOAD_BYTES) {
+        setVoiceError('That audio file is too large for the demo. Please upload a shorter recording under 50 MB.');
+        return;
+      }
+
       state.voice.audioBlob = file;
-      state.voice.audioName = file.name || 'uploaded-audio';
+      state.voice.audioName = file.name || audioNameFromMime(file.type, 'uploaded-audio');
       setVoiceInputAudio(file, state.voice.audioName);
       setVoiceError('');
       setVoiceStatus(state.voice.apiReady ? 'ready' : 'checking');
@@ -4653,92 +4800,269 @@
       setVoiceWaveCaption('Audio selected', 'Ready');
       updateVoiceSubmitState();
     }
-  
+
     function setVoiceInputAudio(blob, name) {
       if (state.voice.inputAudioUrl) URL.revokeObjectURL(state.voice.inputAudioUrl);
       state.voice.inputAudioUrl = URL.createObjectURL(blob);
-  
+      const canPreview = canBrowserPreviewAudio(blob, name);
+
       if (dom.voice.inputAudio) {
-        dom.voice.inputAudio.src = state.voice.inputAudioUrl;
+        dom.voice.inputAudio.pause();
+        dom.voice.inputAudio.removeAttribute('src');
+        dom.voice.inputAudio.preload = 'metadata';
+        dom.voice.inputAudio.setAttribute('playsinline', '');
+        if (canPreview) {
+          dom.voice.inputAudio.src = state.voice.inputAudioUrl;
+          dom.voice.inputAudio.load?.();
+        }
         bindVoiceAudio(dom.voice.inputAudio, 'input');
       }
-      if (dom.voice.inputPlay) dom.voice.inputPlay.disabled = false;
-      dom.voice.inputPanel?.classList.add('has-audio');
-      setVoiceMeta(`${name} is ready. Click Run Ijwi when you are ready.`);
+      if (dom.voice.inputPlay) dom.voice.inputPlay.disabled = !canPreview;
+      dom.voice.inputPanel?.classList.toggle('has-audio', canPreview);
+      setVoiceMeta(`${name} (${formatBytes(blob.size)}) is ready. Click Run Ijwi when you are ready.`);
     }
-  
+
     async function toggleVoiceRecording() {
       cacheVoiceDom();
+      if (state.voice.isStarting || state.voice.isStopping || state.voice.isProcessing) return;
       if (state.voice.isRecording) {
         stopVoiceRecording();
         return;
       }
       await startVoiceRecording();
     }
-  
+
     async function startVoiceRecording() {
       cacheVoiceDom();
+      if (state.voice.isStarting || state.voice.isRecording || state.voice.isStopping) return;
       setVoiceError('');
+      state.voice.isStarting = true;
+      updateVoiceRecordButton('Starting...');
+      updateVoiceSubmitState();
+
+      let stream;
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone unavailable');
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (typeof MediaRecorder === 'undefined') throw new Error('Recording unavailable');
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: { ideal: 1 }
+          }
+        });
         setupVoiceAnalyser(stream);
-  
-        const recorder = new MediaRecorder(stream);
+
+        const recorderOptions = getBestRecorderOptions();
+        const recorder = new MediaRecorder(stream, recorderOptions);
+        const mimeType = recorder.mimeType || recorderOptions.mimeType || 'audio/webm';
         state.voice.stream = stream;
         state.voice.mediaRecorder = recorder;
         state.voice.chunks = [];
-  
+        state.voice.recordMimeType = mimeType;
+        state.voice.recordFileExt = extensionFromMime(mimeType);
+        state.voice.discardCurrentRecording = false;
+
         recorder.addEventListener('dataavailable', (event) => {
           if (event.data && event.data.size > 0) state.voice.chunks.push(event.data);
         });
-  
+
+        recorder.addEventListener('error', () => {
+          setVoiceError('Recording stopped unexpectedly. Please try again or upload an audio file.');
+          finalizeVoiceRecording(recorder, { failed: true });
+        });
+
         recorder.addEventListener('stop', () => {
-          const blob = new Blob(state.voice.chunks, { type: recorder.mimeType || 'audio/webm' });
-          state.voice.audioBlob = blob;
-          state.voice.audioName = 'recorded-question.webm';
-          state.voice.chunks = [];
-          setVoiceInputAudio(blob, state.voice.audioName);
-          setVoiceWaveMode('selected');
-          setVoiceWaveCaption('Recording captured', 'Ready');
-          setVoiceStatus(state.voice.apiReady ? 'ready' : 'checking');
-          updateVoiceSubmitState();
+          finalizeVoiceRecording(recorder);
         }, { once: true });
-  
-        recorder.start();
+
+        for (const track of stream.getAudioTracks()) {
+          track.addEventListener('ended', () => {
+            if (state.voice.isRecording || state.voice.isStopping) stopVoiceRecording({ reason: 'Microphone stopped' });
+          }, { once: true });
+        }
+
+        recorder.start(1000);
         state.voice.isRecording = true;
+        state.voice.isStarting = false;
         state.voice.recordingStartedAt = Date.now();
         startVoiceTimer();
-        if (dom.voice.recordLabel) dom.voice.recordLabel.textContent = 'Stop';
-        dom.voice.recordBtn?.classList.add('recording');
-        setVoiceMeta('Recording...');
+        updateVoiceRecordButton('Stop');
+        setVoiceMeta('Recording... Tap Stop when you finish speaking.');
         setVoiceStatus('recording');
         setVoiceWaveMode('recording');
         setVoiceWaveCaption('Listening now', 'Live level');
         updateVoiceSubmitState();
+        if (state.voice.maxRecordingTimeoutId) window.clearTimeout(state.voice.maxRecordingTimeoutId);
+        state.voice.maxRecordingTimeoutId = window.setTimeout(() => {
+          if (state.voice.isRecording) stopVoiceRecording({ reason: 'Maximum length reached' });
+        }, MAX_RECORDING_MS);
       } catch (err) {
+        if (stream) stopStreamTracks(stream);
+        cleanupVoiceAnalyser();
+        stopVoiceTimer();
+        state.voice.isStarting = false;
+        state.voice.isRecording = false;
+        state.voice.isStopping = false;
+        state.voice.mediaRecorder = null;
+        state.voice.stream = null;
+        updateVoiceRecordButton('Record');
         setVoiceStatus(state.voice.apiReady ? 'ready' : 'error');
         setVoiceError('Microphone access failed. You can still upload an audio file.');
+        updateVoiceSubmitState();
       }
     }
-  
-    function stopVoiceRecording() {
+
+    function stopVoiceRecording(options = {}) {
       cacheVoiceDom();
+      if (state.voice.isStopping) return;
       const recorder = state.voice.mediaRecorder;
-      if (recorder && recorder.state !== 'inactive') recorder.stop();
-      if (state.voice.stream) {
-        for (const track of state.voice.stream.getTracks()) track.stop();
+      if (!recorder) {
+        state.voice.isRecording = false;
+        state.voice.isStarting = false;
+        stopVoiceTimer();
+        cleanupVoiceAnalyser();
+        updateVoiceRecordButton('Record');
+        updateVoiceSubmitState();
+        return;
       }
+
+      state.voice.isRecording = false;
+      state.voice.isStarting = false;
+      state.voice.isStopping = true;
+      state.voice.discardCurrentRecording = Boolean(options.discard);
+      stopVoiceTimer();
+      updateVoiceRecordButton('Saving...');
+      updateVoiceSubmitState();
+      setVoiceStatus('checking', 'Saving');
+      setVoiceWaveMode('selected');
+      setVoiceWaveCaption('Saving recording', 'Please wait');
+      setVoiceMeta(options.reason === 'Maximum length reached'
+        ? 'Recording limit reached. Saving your audio...'
+        : 'Saving your recording...');
+
+      try {
+        if (recorder.state !== 'inactive') {
+          recorder.requestData?.();
+          recorder.stop();
+        } else {
+          finalizeVoiceRecording(recorder);
+        }
+      } catch (err) {
+        finalizeVoiceRecording(recorder, { failed: true });
+      }
+
+      if (state.voice.stopTimeoutId) window.clearTimeout(state.voice.stopTimeoutId);
+      state.voice.stopTimeoutId = window.setTimeout(() => {
+        if (state.voice.isStopping) finalizeVoiceRecording(recorder);
+      }, 1800);
+    }
+
+    function finalizeVoiceRecording(recorder, options = {}) {
+      if (state.voice.stopTimeoutId) window.clearTimeout(state.voice.stopTimeoutId);
+      if (state.voice.maxRecordingTimeoutId) window.clearTimeout(state.voice.maxRecordingTimeoutId);
+      state.voice.stopTimeoutId = null;
+      state.voice.maxRecordingTimeoutId = null;
+      stopStreamTracks(state.voice.stream);
       state.voice.stream = null;
       state.voice.mediaRecorder = null;
       cleanupVoiceAnalyser();
       stopVoiceTimer();
+
+      const mimeType = state.voice.recordMimeType || recorder?.mimeType || 'audio/webm';
+      const chunks = state.voice.chunks.splice(0);
+      const shouldDiscard = state.voice.discardCurrentRecording;
+      state.voice.discardCurrentRecording = false;
+      state.voice.isStarting = false;
       state.voice.isRecording = false;
-      if (dom.voice.recordLabel) dom.voice.recordLabel.textContent = 'Record';
-      dom.voice.recordBtn?.classList.remove('recording');
+      state.voice.isStopping = false;
+      updateVoiceRecordButton('Record');
+
+      if (shouldDiscard) {
+        updateVoiceSubmitState();
+        return;
+      }
+
+      if (options.failed || !chunks.length) {
+        setVoiceStatus(state.voice.apiReady ? 'ready' : 'error');
+        setVoiceWaveMode('idle');
+        setVoiceWaveCaption('Recording not captured', 'Try again');
+        setVoiceError('The recording did not capture audio. Please try again, speak close to the microphone, or upload an audio file.');
+        updateVoiceSubmitState();
+        return;
+      }
+
+      const blob = new Blob(chunks, { type: mimeType });
+      if (!blob.size) {
+        setVoiceStatus(state.voice.apiReady ? 'ready' : 'error');
+        setVoiceWaveMode('idle');
+        setVoiceWaveCaption('Recording empty', 'Try again');
+        setVoiceError('The recording was empty. Please try again or upload an audio file.');
+        updateVoiceSubmitState();
+        return;
+      }
+
+      state.voice.audioBlob = blob;
+      state.voice.audioName = `recorded-question.${extensionFromMime(mimeType)}`;
+      setVoiceInputAudio(blob, state.voice.audioName);
+      setVoiceError('');
+      setVoiceWaveMode('selected');
+      setVoiceWaveCaption('Recording captured', 'Ready');
+      setVoiceStatus(state.voice.apiReady ? 'ready' : 'checking');
       updateVoiceSubmitState();
     }
-  
+
+    function stopStreamTracks(stream) {
+      if (!stream) return;
+      for (const track of stream.getTracks()) {
+        try { track.stop(); } catch (err) {}
+      }
+    }
+
+    function getBestRecorderOptions() {
+      if (typeof MediaRecorder === 'undefined') return {};
+      for (const mimeType of RECORD_MIME_CANDIDATES) {
+        if (MediaRecorder.isTypeSupported?.(mimeType)) return { mimeType };
+      }
+      return {};
+    }
+
+    function extensionFromMime(mimeType = '') {
+      const lower = String(mimeType || '').toLowerCase();
+      if (lower.includes('3gpp') || lower.includes('3gp')) return '3gp';
+      if (lower.includes('3gpp2') || lower.includes('3g2')) return '3g2';
+      if (lower.includes('amr-wb') || lower.includes('awb')) return 'awb';
+      if (lower.includes('amr')) return 'amr';
+      if (lower.includes('caf') || lower.includes('x-caf')) return 'caf';
+      if (lower.includes('aiff') || lower.includes('aif')) return 'aiff';
+      if (lower.includes('mp4') || lower.includes('aac') || lower.includes('m4a') || lower.includes('x-m4a')) return 'm4a';
+      if (lower.includes('ogg') || lower.includes('opus')) return 'ogg';
+      if (lower.includes('mpeg') || lower.includes('mp3')) return 'mp3';
+      if (lower.includes('wav') || lower.includes('wave')) return 'wav';
+      if (lower.includes('flac')) return 'flac';
+      if (lower.includes('matroska') || lower.includes('mka') || lower.includes('mkv')) return 'mka';
+      if (lower.includes('quicktime') || lower.includes('mov')) return 'mov';
+      return 'webm';
+    }
+
+    function audioNameFromMime(mimeType, fallbackBase = 'audio') {
+      return `${fallbackBase}.${extensionFromMime(mimeType || '')}`;
+    }
+
+    function formatBytes(bytes = 0) {
+      if (!bytes) return '0 KB';
+      const units = ['B', 'KB', 'MB', 'GB'];
+      let value = bytes;
+      let unit = 0;
+      while (value >= 1024 && unit < units.length - 1) {
+        value /= 1024;
+        unit++;
+      }
+      return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
+    }
+
     function startVoiceTimer() {
       stopVoiceTimer();
       updateVoiceTimer();
@@ -4762,18 +5086,23 @@
     function setupVoiceAnalyser(stream) {
       cleanupVoiceAnalyser();
       if (!AudioContextClass) return;
-      const ctx = new AudioContextClass();
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = 0.58;
-      const source = ctx.createMediaStreamSource(stream);
-      source.connect(analyser);
-      state.voice.audioContext = ctx;
-      state.voice.analyser = analyser;
-      state.voice.source = source;
-      state.voice.waveData = new Float32Array(analyser.fftSize);
+      try {
+        const ctx = new AudioContextClass();
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 2048;
+        analyser.smoothingTimeConstant = 0.58;
+        const source = ctx.createMediaStreamSource(stream);
+        source.connect(analyser);
+        ctx.resume?.().catch(() => {});
+        state.voice.audioContext = ctx;
+        state.voice.analyser = analyser;
+        state.voice.source = source;
+        state.voice.waveData = new Float32Array(analyser.fftSize);
+      } catch (err) {
+        cleanupVoiceAnalyser();
+      }
     }
-  
+
     function cleanupVoiceAnalyser() {
       state.voice.source?.disconnect?.();
       if (state.voice.audioContext && state.voice.audioContext.state !== 'closed') {
@@ -4809,7 +5138,7 @@
     function resizeCanvasSlot(slot) {
       if (!slot.canvas) return;
       const rect = slot.canvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = getCanvasDpr();
       const width = Math.max(1, Math.floor(rect.width * dpr));
       const height = Math.max(1, Math.floor(rect.height * dpr));
       if (slot.width === width && slot.height === height && slot.dpr === dpr) return;
@@ -4820,8 +5149,28 @@
       slot.canvas.height = height;
     }
   
+    function getCanvasDpr() {
+      const raw = window.devicePixelRatio || 1;
+      const isSmall = window.matchMedia('(max-width: 720px)').matches;
+      return Math.max(1, Math.min(raw, isSmall ? 1.35 : 1.75));
+    }
+
+    function observeVoiceLoopVisibility() {
+      if (!dom.voice.shell || voiceLoopObserver || !('IntersectionObserver' in window)) return;
+      voiceLoopObserver = new IntersectionObserver((entries) => {
+        const entry = entries[0];
+        state.voice.loopInViewport = Boolean(entry?.isIntersecting);
+        syncVoiceLoopVisibility();
+      }, { rootMargin: '160px 0px', threshold: 0.01 });
+      voiceLoopObserver.observe(dom.voice.shell);
+    }
+
     function shouldRunVoiceLoops() {
-      return voiceDomReady && state.currentPage === 'try' && !document.hidden && !prefersReducedMotion.matches;
+      return voiceDomReady
+        && state.currentPage === 'try'
+        && state.voice.loopInViewport !== false
+        && !document.hidden
+        && !prefersReducedMotion.matches;
     }
   
     function syncVoiceLoopVisibility() {
@@ -4830,10 +5179,12 @@
         return;
       }
       resizeVoiceCanvases();
-      if (!state.voice.waveAnimId && canvasSlots.input.canvas) {
+      if (!state.voice.waveAnimId && !state.voice.waveTimerId && canvasSlots.input.canvas) {
+        state.voice.lastInputDrawAt = 0;
         state.voice.waveAnimId = requestAnimationFrame(drawVoiceWave);
       }
-      if (!state.voice.responseWaveAnimId && canvasSlots.response.canvas) {
+      if (!state.voice.responseWaveAnimId && !state.voice.responseWaveTimerId && canvasSlots.response.canvas) {
+        state.voice.lastResponseDrawAt = 0;
         state.voice.responseWaveAnimId = requestAnimationFrame(drawResponseWave);
       }
     }
@@ -4841,8 +5192,12 @@
     function stopVoiceWaveLoops() {
       if (state.voice.waveAnimId) cancelAnimationFrame(state.voice.waveAnimId);
       if (state.voice.responseWaveAnimId) cancelAnimationFrame(state.voice.responseWaveAnimId);
+      if (state.voice.waveTimerId) window.clearTimeout(state.voice.waveTimerId);
+      if (state.voice.responseWaveTimerId) window.clearTimeout(state.voice.responseWaveTimerId);
       state.voice.waveAnimId = null;
       state.voice.responseWaveAnimId = null;
+      state.voice.waveTimerId = null;
+      state.voice.responseWaveTimerId = null;
     }
   
     function drawVoiceWave() {
@@ -4852,9 +5207,9 @@
       if (!slot.canvas || !slot.ctx) return;
       if (!slot.width || !slot.height) resizeCanvasSlot(slot);
   
-      drawHeroStyleWave(slot.ctx, getVoiceWaveLevels(slot.width), state.voice.waveMode, slot.width, slot.height, slot.dpr);
-      state.voice.wavePhase += state.voice.waveMode === 'processing' ? 0.06 : 0.018;
-      state.voice.waveAnimId = requestAnimationFrame(drawVoiceWave);
+      drawHeroStyleWave(slot.ctx, getVoiceWaveLevels(slot.width / slot.dpr), state.voice.waveMode, slot.width, slot.height, slot.dpr);
+      state.voice.wavePhase += getVoicePhaseStep(state.voice.waveMode);
+      scheduleNextVoiceWave('input', getVoiceFrameInterval(state.voice.waveMode));
     }
   
     function drawResponseWave() {
@@ -4864,11 +5219,36 @@
       if (!slot.canvas || !slot.ctx) return;
       if (!slot.width || !slot.height) resizeCanvasSlot(slot);
   
-      drawHeroStyleWave(slot.ctx, getResponseWaveLevels(slot.width), state.voice.responseWaveMode, slot.width, slot.height, slot.dpr);
-      state.voice.responseWavePhase += state.voice.responseWaveMode === 'processing' ? 0.058 : 0.018;
-      state.voice.responseWaveAnimId = requestAnimationFrame(drawResponseWave);
+      drawHeroStyleWave(slot.ctx, getResponseWaveLevels(slot.width / slot.dpr), state.voice.responseWaveMode, slot.width, slot.height, slot.dpr);
+      state.voice.responseWavePhase += getVoicePhaseStep(state.voice.responseWaveMode);
+      scheduleNextVoiceWave('response', getVoiceFrameInterval(state.voice.responseWaveMode));
     }
   
+    function scheduleNextVoiceWave(kind, delay) {
+      if (!shouldRunVoiceLoops()) return;
+      const isInput = kind === 'input';
+      const timerKey = isInput ? 'waveTimerId' : 'responseWaveTimerId';
+      const animKey = isInput ? 'waveAnimId' : 'responseWaveAnimId';
+      if (state.voice[timerKey] || state.voice[animKey]) return;
+      state.voice[timerKey] = window.setTimeout(() => {
+        state.voice[timerKey] = null;
+        if (!shouldRunVoiceLoops()) return;
+        state.voice[animKey] = requestAnimationFrame(isInput ? drawVoiceWave : drawResponseWave);
+      }, delay);
+    }
+
+    function getVoiceFrameInterval(mode) {
+      if (mode === 'recording') return 33;
+      if (mode === 'processing' || mode === 'input-playing' || mode === 'output-playing') return 42;
+      return 110;
+    }
+
+    function getVoicePhaseStep(mode) {
+      if (mode === 'processing') return 0.09;
+      if (mode === 'recording' || mode === 'input-playing' || mode === 'output-playing') return 0.05;
+      return 0.026;
+    }
+
     function drawHeroStyleWave(ctx, levels, mode, width, height, dpr) {
       ctx.clearRect(0, 0, width, height);
       const count = levels.length;
@@ -4902,8 +5282,8 @@
       ctx.shadowBlur = 0;
     }
   
-    function getWaveCount(width) {
-      return width > 760 ? 72 : width > 520 ? 58 : 42;
+    function getWaveCount(cssWidth) {
+      return cssWidth > 760 ? 64 : cssWidth > 520 ? 52 : 34;
     }
   
     function getVoiceWaveLevels(width) {
@@ -5081,9 +5461,13 @@
       if (dom.voice.responsePlay) dom.voice.responsePlay.disabled = true;
   
       try {
-        const wavBlob = await normalizeAudioToWav(state.voice.audioBlob);
+        const preparedAudio = await prepareAudioForSubmission(state.voice.audioBlob);
         const form = new FormData();
-        form.append('audio', wavBlob, 'ijwi-question.wav');
+        form.append('audio', preparedAudio.blob, preparedAudio.fileName);
+        form.append('originalFileName', preparedAudio.originalName || preparedAudio.fileName);
+        form.append('sourceMimeType', preparedAudio.mimeType || preparedAudio.blob.type || '');
+        form.append('clientSideNormalized', preparedAudio.clientSideNormalized ? 'true' : 'false');
+        form.append('preferredTranscode', 'wav-16khz-mono');
   
         const response = await fetch(PROTOTYPE_API_URL + '/voice', { method: 'POST', body: form });
         const data = await response.json().catch(() => ({}));
@@ -5106,6 +5490,7 @@
         setResponseWaveMode('complete');
         setVoiceWaveCaption('Ijwi answered', 'Complete');
         setResponseWaveCaption('Ijwi is ready', 'Complete');
+        scrollVoiceOutputIntoView();
       } catch (err) {
         setVoiceOutput('voice-transcript', 'What Ijwi hears will appear here.', true);
         setVoiceOutput('voice-reply', "Ijwi's answer will appear here.", true);
@@ -5142,22 +5527,102 @@
       return new Blob(chunks, { type: mimeType });
     }
   
-    async function normalizeAudioToWav(blob) {
-      if (!AudioContextClass) return blob;
+    async function prepareAudioForSubmission(blob) {
+      const originalName = sanitizeAudioFileName(state.voice.audioName || audioNameFromMime(blob.type, 'ijwi-question'));
+      const fileName = ensureAudioFileExtension(originalName, blob.type);
+
+      // Production path: send the original browser/mobile recording to the backend.
+      // The backend should use FFmpeg to normalize AMR, CAF, 3GP, M4A, WebM, OGG,
+      // WAV, MP3, and other supported containers into 16 kHz mono WAV before STT.
+      // This avoids expensive browser-side decoding/encoding that causes lag on phones.
+      if (!CLIENT_SIDE_WAV_NORMALIZATION || isLikelyServerTranscodeOnly(blob, fileName)) {
+        return {
+          blob,
+          fileName,
+          originalName,
+          mimeType: blob.type || '',
+          clientSideNormalized: false
+        };
+      }
+
+      // Legacy fallback: only used when explicitly enabled by setting
+      // window.IJWI_CLIENT_SIDE_WAV_NORMALIZATION = true before this script loads.
+      if (isWavAudio(blob, fileName) || !AudioContextClass) {
+        return {
+          blob,
+          fileName,
+          originalName,
+          mimeType: blob.type || '',
+          clientSideNormalized: false
+        };
+      }
+
       let ctx;
       try {
         const arrayBuffer = await blob.arrayBuffer();
         ctx = new AudioContextClass();
         const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
-        return new Blob([encodeWav(audioBuffer)], { type: 'audio/wav' });
+        return {
+          blob: new Blob([encodeWav(audioBuffer)], { type: 'audio/wav' }),
+          fileName: 'ijwi-question.wav',
+          originalName,
+          mimeType: blob.type || '',
+          clientSideNormalized: true
+        };
       } catch (err) {
-        if ((blob.type || '').includes('wav') || state.voice.audioName.toLowerCase().endsWith('.wav')) return blob;
-        throw new Error('Could not prepare that audio file. Please try a WAV file.');
+        return {
+          blob,
+          fileName,
+          originalName,
+          mimeType: blob.type || '',
+          clientSideNormalized: false
+        };
       } finally {
         if (ctx && ctx.state !== 'closed') await ctx.close().catch(() => {});
       }
     }
-  
+
+    function canBrowserPreviewAudio(blob, name = '') {
+      return !isLikelyServerTranscodeOnly(blob, name);
+    }
+
+    function isLikelyServerTranscodeOnly(blob, name = '') {
+      const lowerName = String(name || '').toLowerCase();
+      const lowerType = String(blob?.type || '').toLowerCase();
+      return /\.(amr|awb|3gp|3gpp|3g2|3gpp2|caf|aif|aiff|mka|mkv|mov)$/i.test(lowerName)
+        || /3gpp|amr|caf|aiff|x-caf|quicktime|matroska/.test(lowerType);
+    }
+
+    function ensureAudioFileExtension(name, mimeType = '') {
+      const safeName = sanitizeAudioFileName(name || 'ijwi-question');
+      if (/\.[a-z0-9]{2,5}$/i.test(safeName)) return safeName;
+      return safeName + '.' + extensionFromMime(mimeType || 'audio/webm');
+    }
+
+    function isWavAudio(blob, name = '') {
+      const lowerName = name.toLowerCase();
+      return (blob.type || '').toLowerCase().includes('wav') || lowerName.endsWith('.wav') || lowerName.endsWith('.wave');
+    }
+
+    function sanitizeAudioFileName(name) {
+      const safe = String(name || 'ijwi-question')
+        .trim()
+        .replace(/[^a-zA-Z0-9._-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 80);
+      return safe || 'ijwi-question.wav';
+    }
+
+    function scrollVoiceOutputIntoView() {
+      const target = dom.voice.responsePanel || dom.voice.reply || dom.voice.transcript;
+      if (!target) return;
+      const rect = target.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      if (rect.top < 88 || rect.bottom > viewportHeight - 24) {
+        target.scrollIntoView({ behavior: prefersReducedMotion.matches ? 'auto' : 'smooth', block: 'nearest' });
+      }
+    }
+
     function encodeWav(audioBuffer) {
       const sampleRate = audioBuffer.sampleRate;
       const samples = mixToMono(audioBuffer);
@@ -5276,7 +5741,10 @@
   
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onResize, { passive: true });
-    document.addEventListener('visibilitychange', syncVoiceLoopVisibility);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && state.voice.isRecording) stopVoiceRecording({ reason: 'Page hidden' });
+      syncVoiceLoopVisibility();
+    });
     prefersReducedMotion.addEventListener?.('change', () => {
       if (prefersReducedMotion.matches) {
         for (const el of dom.reveals) el.classList.add('visible');
