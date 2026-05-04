@@ -11,7 +11,7 @@
   <meta property="og:url" content="https://ijwi.rw" />
   <meta property="og:image" content="https://ijwi.rw/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="keywords" content="Kinyarwanda AI, Kinyarwanda voice AI, Rwanda AI, AI in Rwanda, African language AI, low-resource language AI, efficient AI systems, Rwanda knowledge economy, Vision 2050, digital inclusion Rwanda, Kinyarwanda speech AI, Intellevate AI, Aimé Christian Tuyishime" />
+  <meta name="keywords" content="Kinyarwanda AI, Kinyarwanda voice AI, Rwanda AI, AI in Rwanda, African language AI, low-resource language AI, efficient AI systems, Rwanda knowledge economy, Vision 2050, digital inclusion Rwanda, Kinyarwanda speech AI, AHAZAZA TECHNOLOGIES LTD, ahazaza.rw, Aimé Christian Tuyishime" />
   <link rel="canonical" href="https://ijwi.rw" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2032%27%3E%3Crect%20width%3D%2732%27%20height%3D%2732%27%20rx%3D%277%27%20fill%3D%27%2307111F%27%2F%3E%3Cg%20transform%3D%27translate%282%208.47%29%20scale%280.01679%29%27%3E%3Crect%20x%3D%271%27%20y%3D%27251%27%20width%3D%27201%27%20height%3D%27393%27%20rx%3D%27100.5%27%20fill%3D%27%2334D399%27%2F%3E%3Cpath%20d%3D%27M406.5%201C351%201%20306%2046%20306%20101.5V591.5C306%20647%20261%20692%20205.5%20692H105.5C49.8%20692%204%20737.8%204%20793.5C4%20849.2%2049.8%20895%20105.5%20895H394.5C450.2%20895%20496%20849.2%20496%20793.5V101.5C496%2046%20451%201%20406.5%201Z%27%20fill%3D%27%2368D8FF%27%2F%3E%3Crect%20x%3D%27588%27%20y%3D%27251%27%20width%3D%27201%27%20height%3D%27393%27%20rx%3D%27100.5%27%20fill%3D%27%23F6C85F%27%2F%3E%3Crect%20x%3D%27881%27%20y%3D%271%27%20width%3D%27201%27%20height%3D%27893%27%20rx%3D%27100.5%27%20fill%3D%27%2368D8FF%27%2F%3E%3Crect%20x%3D%271174%27%20y%3D%27251%27%20width%3D%27201%27%20height%3D%27393%27%20rx%3D%27100.5%27%20fill%3D%27%23F6C85F%27%2F%3E%3Crect%20x%3D%271467%27%20y%3D%27251%27%20width%3D%27201%27%20height%3D%27643%27%20rx%3D%27100.5%27%20fill%3D%27%2334D399%27%2F%3E%3Crect%20x%3D%271467%27%20y%3D%271%27%20width%3D%27201%27%20height%3D%27253%27%20rx%3D%27100.5%27%20fill%3D%27%23F6C85F%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -151,6 +151,22 @@
       transition: background 280ms ease, border-color 280ms ease, backdrop-filter 280ms ease;
       border-bottom: 1px solid transparent;
     }
+    .scroll-progress {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      width: 100%;
+      height: 2px;
+      z-index: 3;
+      pointer-events: none;
+      transform: translate3d(0, 0, 0) scaleX(var(--scroll-progress-scale, 0));
+      transform-origin: left top;
+      will-change: transform;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      background: linear-gradient(90deg, var(--ijwi-sky), var(--ijwi-green), var(--ijwi-gold));
+    }
     #site-header.scrolled {
       background: rgba(7,17,31,0.78);
       backdrop-filter: blur(18px);
@@ -266,6 +282,7 @@
     }
     .btn-quiet:hover { color: var(--ijwi-text); }
     .btn-sm { height: 40px; padding: 0 var(--sp-5); font-size: 13px; }
+    .btn-company { letter-spacing: -0.01em; }
 
     /* ═══════════════════════════════════════════════
        BADGES (PRD §17.4)
@@ -383,6 +400,28 @@
       margin-bottom: var(--sp-8);
     }
     .hero-cta { display: flex; gap: var(--sp-4); flex-wrap: wrap; margin-bottom: var(--sp-8); }
+    .company-text-link,
+    .hero-company-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 48px;
+      color: var(--ijwi-muted);
+      border-bottom: 1px solid rgba(104,216,255,0.24);
+      padding-bottom: 2px;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.2;
+      transition: color 160ms ease, border-color 160ms ease, transform 160ms ease;
+      white-space: nowrap;
+    }
+    .company-text-link:hover,
+    .company-text-link:focus-visible,
+    .hero-company-link:hover,
+    .hero-company-link:focus-visible {
+      color: var(--ijwi-sky);
+      border-color: rgba(104,216,255,0.6);
+      transform: translateY(-1px);
+    }
     .hero-trust {
       font-size: 13px; color: var(--ijwi-faint);
     }
@@ -2131,7 +2170,8 @@
     @media (max-width: 960px) {
       .site-nav { display: none; }
       .btn-hamburger { display: inline-flex; }
-      .header-cta .btn-primary { display: none; }
+      .header-cta .btn-primary,
+      .header-cta .btn-company { display: none; }
       .header-inner { padding-inline: clamp(16px, 5vw, 28px); }
       .hero {
         min-height: auto;
@@ -2199,6 +2239,7 @@
       .hero-sub { font-size: 15.5px; line-height: 1.68; }
       .hero-cta { flex-direction: column; align-items: stretch; }
       .hero-cta .btn { width: 100%; justify-content: center; }
+      .company-text-link, .hero-company-link { align-self: flex-start; min-height: 34px; }
       .hero-trust { font-size: 12.5px; line-height: 1.55; }
       .hero-microcopy { gap: 8px 18px; }
       .mobile-nav-link { font-size: clamp(22px, 7vw, 28px); }
@@ -2645,6 +2686,7 @@
        HEADER
   ═══════════════════════════════════════════════ -->
   <header id="site-header">
+    <div class="scroll-progress" aria-hidden="true"></div>
     <div class="header-inner">
       <!-- Logo -->
       <button class="logo-wrap" type="button" onclick="navigate('home')" aria-label="Go to homepage">
@@ -2679,6 +2721,9 @@
         <button class="btn btn-primary btn-sm" type="button" onclick="navigate('try')">
           Try Prototype
         </button>
+        <a class="btn btn-secondary btn-sm btn-company" href="https://ahazaza.rw" target="_blank" rel="noopener" aria-label="Learn more about AHAZAZA TECHNOLOGIES LTD, Ijwi's parent company">
+          ahazaza.rw
+        </a>
         <button class="btn-hamburger" id="menu-toggle" type="button" aria-label="Open menu" aria-controls="mobile-menu" aria-expanded="false" onclick="toggleMobileMenu()">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
@@ -2702,8 +2747,9 @@
       <button class="mobile-nav-link" type="button" data-page="contact" onclick="navigate('contact')">Contact</button>
       <button class="mobile-nav-link" type="button" data-page="privacy" onclick="navigate('privacy')">Privacy</button>
     </nav>
-    <div class="mobile-cta">
+    <div class="mobile-cta" style="display:flex;flex-direction:column;gap:var(--sp-3);">
       <button class="btn btn-primary" type="button" style="width:100%;justify-content:center;" onclick="navigate('try')">Try the Prototype</button>
+      <a class="company-text-link" href="https://ahazaza.rw" target="_blank" rel="noopener" aria-label="Learn more about AHAZAZA TECHNOLOGIES LTD, Ijwi's parent company">ahazaza.rw ↗</a>
     </div>
   </div>
 
@@ -2738,8 +2784,9 @@
                   Try the Prototype
                 </button>
                 <button class="btn btn-secondary" onclick="navigate('mission')">Read the Mission</button>
+                <a class="hero-company-link" href="https://ahazaza.rw" target="_blank" rel="noopener" aria-label="Learn more about AHAZAZA TECHNOLOGIES LTD, Ijwi's parent company">ahazaza.rw ↗</a>
               </div>
-              <p class="hero-trust">By <strong>Aimé Christian Tuyishime</strong> — Founder &amp; AI Researcher at Intellevate AI LLC.</p>
+              <p class="hero-trust">By <strong>Aimé Christian Tuyishime</strong> — Founder &amp; AI Researcher at AHAZAZA TECHNOLOGIES LTD.</p>
               <div class="hero-microcopy">
                 <span>Digital inclusion</span>
                 <span>Knowledge access</span>
@@ -3034,9 +3081,9 @@
               <span class="timeline-year">2026</span>
               <div class="timeline-dot"></div>
               <div class="timeline-content">
-                <h4>Ijwi — Kinyarwanda-Native Voice AI</h4>
-                <p>Launched as the convergence of the entire journey: democratizing intelligence for Rwanda through language, voice, and efficiency.</p>
-                <div class="timeline-badge"><span class="badge badge-blue">Active Research</span></div>
+                <h4>Ijwi + AHAZAZA — Kinyarwanda-Native Voice AI</h4>
+                <p>Ijwi now sits together with AHAZAZA TECHNOLOGIES LTD as the Kinyarwanda-native AI layer for a larger mission: democratizing intelligence for Rwanda through language, voice, efficiency, and practical commerce infrastructure.</p>
+                <div class="timeline-badge"><span class="badge badge-blue">Active Research</span> <span class="badge badge-green">AHAZAZA-Owned</span></div>
               </div>
             </div>
             <div class="timeline-item highlight reveal">
@@ -3115,6 +3162,7 @@
                 Try Ijwi
               </button>
               <button class="btn btn-secondary" onclick="navigate('contact')">Contact Ijwi</button>
+              <a class="company-text-link" href="https://ahazaza.rw" target="_blank" rel="noopener" aria-label="Learn more about AHAZAZA TECHNOLOGIES LTD, Ijwi's parent company">ahazaza.rw ↗</a>
             </div>
           </div>
         </div>
@@ -3579,9 +3627,9 @@
                 <span class="timeline-year">2026</span>
                 <div class="timeline-dot"></div>
                 <div class="timeline-content">
-                  <h4>Ijwi — Kinyarwanda-Native Voice AI Research Prototype</h4>
-                  <p>The convergence of the entire journey. SEABEM democratized agricultural intelligence. The master's thesis democratized financial analysis. Intellevate focused on efficient AI systems. Ijwi applies these lessons to Rwanda's most important AI access bottleneck: language, cost, trust, and practical usefulness.</p>
-                  <div class="timeline-badge"><span class="badge badge-blue badge-dot">Active Research</span></div>
+                  <h4>Ijwi + AHAZAZA — Kinyarwanda-Native Voice AI Research Prototype</h4>
+                  <p>The convergence of the entire journey. SEABEM democratized agricultural intelligence. The master's thesis democratized financial analysis. Intellevate focused on efficient AI systems. Ijwi now sits together with AHAZAZA TECHNOLOGIES LTD as the Kinyarwanda-native AI layer for Rwanda's language, cost, trust, practical usefulness, and commerce-infrastructure access bottlenecks.</p>
+                  <div class="timeline-badge"><span class="badge badge-blue badge-dot">Active Research</span> <span class="badge badge-green">AHAZAZA-Owned</span></div>
                 </div>
               </div>
               <div class="timeline-item highlight reveal">
@@ -3598,7 +3646,7 @@
 
           <div class="about-quote reveal">
             <blockquote>"My past projects kept returning to the same idea: powerful technology should not remain accessible only to technical experts or wealthy institutions. Ijwi is the next step in that journey - bringing knowledge, services, and productivity tools closer to Rwandans through language, voice, and efficiency."</blockquote>
-            <div class="about-quote-attr">— Aimé Christian Tuyishime, Founder & AI Researcher, Intellevate AI LLC</div>
+            <div class="about-quote-attr">— Aimé Christian Tuyishime, Founder & AI Researcher, AHAZAZA TECHNOLOGIES LTD</div>
           </div>
 
           <div class="about-cta-row reveal">
@@ -4211,7 +4259,7 @@
 
         <div class="privacy-section">
           <h2>Overview</h2>
-          <p>Ijwi is an ongoing Kinyarwanda-native voice AI research project by Aimé Christian Tuyishime and Intellevate AI LLC. We are committed to protecting your privacy and being transparent about how we handle any information you share while using this site or the prototype.</p>
+          <p>Ijwi is an ongoing Kinyarwanda-native voice AI research project by Aimé Christian Tuyishime under AHAZAZA TECHNOLOGIES LTD. We are committed to protecting your privacy and being transparent about how we handle any information you share while using this site or the prototype.</p>
           <p>You can try the Ijwi prototype without creating an account. We collect the minimum data needed to improve the research and to respond to direct messages you choose to send.</p>
         </div>
 
@@ -4279,7 +4327,7 @@
 </svg>
             <span style="font-family:var(--font-display);font-size:18px;font-weight:700">Ijwi</span>
           </div>
-          <p>Kinyarwanda-native voice AI research project for knowledge access, digital inclusion, public services, productivity, and local AI capacity in Rwanda.</p>
+          <p>Kinyarwanda-native voice AI research project owned by AHAZAZA TECHNOLOGIES LTD for knowledge access, digital inclusion, public services, productivity, and local AI capacity in Rwanda.</p>
         </div>
         <div class="footer-col">
           <h4>Explore</h4>
@@ -4294,6 +4342,7 @@
           <h4>About</h4>
           <ul>
             <li><a onclick="navigate('about')">Aimé's Journey</a></li>
+            <li><a href="https://ahazaza.rw" target="_blank" rel="noopener">Parent Company: ahazaza.rw</a></li>
             <li><a onclick="navigate('contact')">Contact &amp; Collaborate</a></li>
             <li><a onclick="navigate('privacy')">Privacy Policy</a></li>
           </ul>
@@ -4310,7 +4359,7 @@
       </div>
       <div class="footer-bottom">
         <div class="footer-copy">
-          © 2026 Ijwi / Intellevate AI LLC. Ijwi is an ongoing research project building Kinyarwanda-native voice AI for Rwanda's knowledge economy.
+          © 2026 Ijwi / AHAZAZA TECHNOLOGIES LTD. Ijwi is an ongoing research project owned by AHAZAZA TECHNOLOGIES LTD, building Kinyarwanda-native voice AI for Rwanda's knowledge economy.
         </div>
         <div class="footer-bottom-links">
           <a onclick="navigate('privacy')">Privacy</a>
@@ -4429,6 +4478,7 @@
   
     function cacheDom() {
       dom.header = byId('site-header');
+      dom.scrollProgress = document.querySelector('.scroll-progress');
       dom.menu = byId('mobile-menu');
       dom.menuToggle = byId('menu-toggle');
       dom.mobileClose = document.querySelector('.mobile-menu-close');
@@ -4540,6 +4590,7 @@
       }
 
       window.requestAnimationFrame(() => {
+        updateScrollProgress();
         checkReveals();
         if (nextPage === 'try') resizeVoiceCanvases();
       });
@@ -4588,6 +4639,15 @@
       headerScrolled = shouldBeScrolled;
       dom.header.classList.toggle('scrolled', shouldBeScrolled);
     }
+
+    function updateScrollProgress() {
+      if (!dom.scrollProgress) return;
+      const scrollTop = Math.max(0, window.scrollY || document.documentElement.scrollTop || 0);
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      const scrollableHeight = Math.max(0, document.documentElement.scrollHeight - viewportHeight);
+      const ratio = scrollableHeight > 0 ? scrollTop / scrollableHeight : 0;
+      dom.scrollProgress.style.setProperty('--scroll-progress-scale', String(Math.min(1, Math.max(0, ratio))));
+    }
   
     function onScroll() {
       if (scrollTicking) return;
@@ -4595,6 +4655,7 @@
       window.requestAnimationFrame(() => {
         scrollTicking = false;
         updateHeaderState();
+        updateScrollProgress();
       });
     }
   
@@ -4635,6 +4696,7 @@
       resizeTicking = true;
       window.requestAnimationFrame(() => {
         resizeTicking = false;
+        updateScrollProgress();
         if (state.currentPage === 'try') resizeVoiceCanvases();
         checkReveals();
       });
@@ -5735,6 +5797,7 @@
       initReveals();
       enhanceClickableElements();
       updateHeaderState();
+      updateScrollProgress();
       navigate(pageFromLocation(), { replaceUrl: true, scroll: false, updateUrl: false });
       if (state.currentPage === 'try') checkPrototypeAvailability();
     }
